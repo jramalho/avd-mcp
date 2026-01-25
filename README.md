@@ -11,14 +11,32 @@ A Model Context Protocol (MCP) server for Android Virtual Device automation. Thi
 
 ## Prerequisites
 
-- [Android SDK](https://developer.android.com/studio) with db and emulator in PATH
+- [Android SDK](https://developer.android.com/studio) with `adb` and `emulator` in PATH
 - [Node.js](https://nodejs.org/) 18 or higher
-- [pnpm](https://pnpm.io/) (recommended) or npm
 - An Android Virtual Device configured in Android Studio
 
 ## Installation
 
-`ash
+### Quick Start (Recommended)
+
+No installation needed! Just add to your MCP client config (e.g., Claude Desktop):
+
+``json
+{
+  "mcpServers": {
+    "avd-mcp": {
+      "command": "npx",
+      "args": ["avd-mcp"]
+    }
+  }
+}
+``
+
+That's it! The package will be automatically downloaded and executed when needed.
+
+### Local Development
+
+``bash
 # Clone the repository
 git clone https://github.com/yourusername/avd-mcp.git
 cd avd-mcp
@@ -26,50 +44,25 @@ cd avd-mcp
 # Install dependencies
 pnpm install
 
-# Build the project (if needed)
+# Build the project
 pnpm build
-`
+
+# Test locally
+node dist/index.js
+``
 
 ## Usage
 
-### As an MCP Server
-
-Add this server to your MCP client configuration (e.g., Claude Desktop):
-
-`json
-{
-  "mcpServers": {
-    "avd-mcp": {
-      "command": "node",
-      "args": ["path/to/avd-mcp/src/index.ts"]
-    }
-  }
-}
-`
-
-Or using tsx:
-
-`json
-{
-  "mcpServers": {
-    "avd-mcp": {
-      "command": "pnpm",
-      "args": ["--dir", "path/to/avd-mcp", "dev"]
-    }
-  }
-}
-`
-
 ### Available Tools
 
-#### vd_run_and_screenshot
+#### `avd_run_and_screenshot`
 
 Starts an AVD (if not running), executes a command, waits, and captures a screenshot.
 
 **Parameters:**
-- vdName (optional): Name of the AVD to start. If omitted and no device is running, will throw an error.
-- command (required): Command to execute (e.g., pnpm android, gradle assembleDebug)
-- waitMsAfterRun (optional): Milliseconds to wait after command execution before taking screenshot. Default: 2000ms
+- `avdName` (optional): Name of the AVD to start. If omitted and no device is running, will throw an error.
+- `command` (required): Command to execute (e.g., `pnpm android`, `gradle assembleDebug`)
+- `waitMsAfterRun` (optional): Milliseconds to wait after command execution before taking screenshot. Default: 2000ms
 
 **Returns:**
 - Command output (stdout/stderr)
@@ -77,47 +70,54 @@ Starts an AVD (if not running), executes a command, waits, and captures a screen
 
 **Example:**
 
-`	ypescript
+``typescript
 {
   "avdName": "Pixel_5_API_31",
   "command": "pnpm android",
   "waitMsAfterRun": 5000
 }
-`
-
-## Development
-
-`ash
-# Run in development mode
-pnpm dev
-
-# Type check
-npx tsc --noEmit
-`
+``
 
 ## How It Works
 
-1. **Device Check**: Checks if an Android device/emulator is already running using db devices
-2. **Start Emulator**: If no device is running and vdName is provided, starts the emulator
+1. **Device Check**: Checks if an Android device/emulator is already running using `adb devices`
+2. **Start Emulator**: If no device is running and `avdName` is provided, starts the emulator
 3. **Execute Command**: Runs the specified command using PowerShell
 4. **Wait**: Waits for the specified duration to allow UI updates
-5. **Screenshot**: Captures a screenshot using db screencap
+5. **Screenshot**: Captures a screenshot using `adb screencap`
 6. **Return**: Returns both command output and screenshot
 
 ## Troubleshooting
 
 ### AVD not starting
-- Verify AVD name matches one configured in Android Studio: emulator -list-avds
-- Check that emulator is in your system PATH
+- Verify AVD name matches one configured in Android Studio: `emulator -list-avds`
+- Check that `emulator` is in your system PATH
 - Ensure virtualization is enabled in BIOS (Intel VT-x or AMD-V)
 
 ### ADB not found
 - Install Android SDK Platform-Tools
-- Add Android SDK platform-tools to PATH: C:\Users\YourUser\AppData\Local\Android\Sdk\platform-tools
+- Add Android SDK platform-tools to PATH: `C:\Users\YourUser\AppData\Local\Android\Sdk\platform-tools`
 
 ### Screenshot timeout
-- Increase waitMsAfterRun parameter
-- Check if device is fully booted: db shell getprop sys.boot_completed (should return 1)
+- Increase `waitMsAfterRun` parameter
+- Check if device is fully booted: `adb shell getprop sys.boot_completed` (should return `1`)
+
+## Publishing to npm
+
+To publish this package to npm:
+
+``bash
+# Login to npm
+npm login
+
+# Update version in package.json
+npm version patch  # or minor, or major
+
+# Publish
+npm publish
+``
+
+After publishing, users can use it directly with `npx avd-mcp` without cloning!
 
 ## Contributing
 

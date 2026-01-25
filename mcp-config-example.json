@@ -1,0 +1,8 @@
+﻿{
+  "mcpServers": {
+    "avd-mcp": {
+      "command": "npx",
+      "args": ["avd-mcp"]
+    }
+  }
+}

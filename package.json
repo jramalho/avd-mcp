@@ -2,8 +2,23 @@
   "name": "avd-mcp",
   "version": "0.1.0",
   "type": "module",
+  "description": "MCP server for Android Virtual Device automation",
+  "author": "avd-mcp contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/avd-mcp.git"
+  },
+  "bin": {
+    "avd-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
