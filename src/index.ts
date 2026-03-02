@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 
 import { z } from "zod";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { readFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import os from "node:os";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,127 +8,101 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ListAvdsUseCase } from "./application/list-avds-use-case.js";
+import { RunAndScreenshotUseCase } from "./application/run-and-screenshot-use-case.js";
+import { StartAvdUseCase } from "./application/start-avd-use-case.js";
+import { StopAvdUseCase } from "./application/stop-avd-use-case.js";
+import { AdbAdapter } from "./adapters/node/adb-adapter.js";
+import { ClockAdapter } from "./adapters/node/clock-adapter.js";
+import { EmulatorAdapter } from "./adapters/node/emulator-adapter.js";
+import { ExecCommandRunner } from "./adapters/node/exec-command-runner.js";
+import { ScreenshotAdapter } from "./adapters/node/screenshot-adapter.js";
+import { ShellAdapter } from "./adapters/node/shell-adapter.js";
+import { gpuModes } from "./domain/avd.js";
 
-const exec = promisify(execFile);
+const runAndScreenshotInputSchema = {
+  type: "object",
+  properties: {
+    avdName: { type: "string" },
+    command: { type: "string" },
+    coldBoot: { type: "boolean", default: false },
+    wipeData: { type: "boolean", default: false },
+    noWindow: { type: "boolean", default: false },
+    readOnly: { type: "boolean", default: false },
+    gpuMode: {
+      type: "string",
+      enum: [...gpuModes],
+    },
+    waitMsAfterRun: { type: "number", default: 2000 },
+  },
+  required: ["command"],
+} as const;
 
-async function run(cmd: string, args: string[], timeout = 10 * 60_000) {
-  const { stdout, stderr } = await exec(cmd, args, {
-    timeout,
-    maxBuffer: 50 * 1024 * 1024,
-  });
-  return { stdout: String(stdout ?? ""), stderr: String(stderr ?? "") };
-}
+const runAndScreenshotSchema = z.object({
+  avdName: z.string().optional(),
+  command: z.string(),
+  coldBoot: z.boolean().optional().default(false),
+  wipeData: z.boolean().optional().default(false),
+  noWindow: z.boolean().optional().default(false),
+  readOnly: z.boolean().optional().default(false),
+  gpuMode: z.enum(gpuModes).optional(),
+  waitMsAfterRun: z.number().optional().default(2000),
+});
 
-async function runShellCommand(command: string, timeout = 30 * 60_000) {
-  if (process.platform === "win32") {
-    return run(
-      "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-      timeout
-    );
-  }
+const startAvdInputSchema = {
+  type: "object",
+  properties: {
+    avdName: { type: "string" },
+    coldBoot: { type: "boolean", default: false },
+    wipeData: { type: "boolean", default: false },
+    noWindow: { type: "boolean", default: false },
+    readOnly: { type: "boolean", default: false },
+    gpuMode: {
+      type: "string",
+      enum: [...gpuModes],
+    },
+    waitForBoot: { type: "boolean", default: true },
+  },
+  required: [],
+} as const;
 
-  try {
-    return await run("sh", ["-lc", command], timeout);
-  } catch (error: unknown) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      try {
-        return await run("bash", ["-lc", command], timeout);
-      } catch (bashError: unknown) {
-        if (
-          typeof bashError === "object" &&
-          bashError !== null &&
-          "code" in bashError &&
-          bashError.code === "ENOENT"
-        ) {
-          return run("zsh", ["-lc", command], timeout);
-        }
-        throw bashError;
-      }
-    }
-    throw error;
-  }
-}
+const startAvdSchema = z.object({
+  avdName: z.string().optional(),
+  coldBoot: z.boolean().optional().default(false),
+  wipeData: z.boolean().optional().default(false),
+  noWindow: z.boolean().optional().default(false),
+  readOnly: z.boolean().optional().default(false),
+  gpuMode: z.enum(gpuModes).optional(),
+  waitForBoot: z.boolean().optional().default(true),
+});
 
-async function adb(args: string[]) {
-  return run("adb", args, 5 * 60_000);
-}
+const stopAvdInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+  },
+  required: [],
+} as const;
 
-async function listAvds() {
-  const { stdout } = await run("emulator", ["-list-avds"], 60_000);
-  return stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
+const stopAvdSchema = z.object({
+  serial: z.string().optional(),
+});
 
-async function ensureDir(dir: string) {
-  await mkdir(dir, { recursive: true });
-}
+const commandRunner = new ExecCommandRunner();
+const adbAdapter = new AdbAdapter(commandRunner);
+const clockAdapter = new ClockAdapter();
+const emulatorAdapter = new EmulatorAdapter(commandRunner);
 
-async function screenshot(out: string) {
-  const tmp = "/sdcard/__mcp_screen.png";
-  await adb(["shell", "screencap", "-p", tmp]);
-  await adb(["pull", tmp, out]);
-  await adb(["shell", "rm", tmp]);
-}
-
-type EmulatorBootOptions = {
-  avd?: string;
-  coldBoot?: boolean;
-  wipeData?: boolean;
-  noWindow?: boolean;
-  readOnly?: boolean;
-  gpuMode?: "auto" | "host" | "swiftshader_indirect";
-};
-
-async function ensureEmulator(options: EmulatorBootOptions) {
-  const {
-    avd,
-    coldBoot = false,
-    wipeData = false,
-    noWindow = false,
-    readOnly = false,
-    gpuMode,
-  } = options;
-  const devices = await adb(["devices"]);
-  if (devices.stdout.includes("\tdevice")) return;
-
-  const avds = await listAvds();
-  if (!avds.length) {
-    throw new Error("Nenhum AVD encontrado na máquina. Crie um AVD no Android Studio.");
-  }
-
-  if (avd && !avds.includes(avd)) {
-    throw new Error(
-      `avdName \"${avd}\" não encontrado. AVDs disponíveis: ${avds.join(", ")}`
-    );
-  }
-
-  const selectedAvd = avd ?? avds[0]!;
-  const emulatorArgs = ["-avd", selectedAvd, "-no-snapshot-save"];
-  if (coldBoot) emulatorArgs.push("-no-snapshot-load");
-  if (wipeData) emulatorArgs.push("-wipe-data");
-  if (noWindow) emulatorArgs.push("-no-window");
-  if (readOnly) emulatorArgs.push("-read-only");
-  if (gpuMode) emulatorArgs.push("-gpu", gpuMode);
-
-  // dispara o emulator (não bloqueia)
-  run("emulator", emulatorArgs, 5000).catch(() => {});
-
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const chk = await adb(["devices"]);
-    if (chk.stdout.includes("\tdevice")) return;
-  }
-
-  throw new Error(`Timeout esperando o AVD \"${selectedAvd}\" subir.`);
-}
+const runAndScreenshotUseCase = new RunAndScreenshotUseCase(
+  adbAdapter,
+  emulatorAdapter,
+  new ShellAdapter(commandRunner),
+  new ScreenshotAdapter(commandRunner),
+  clockAdapter
+);
+const listAvdsUseCase = new ListAvdsUseCase(emulatorAdapter);
+const startAvdUseCase = new StartAvdUseCase(adbAdapter, emulatorAdapter, clockAdapter);
+const stopAvdUseCase = new StopAvdUseCase(adbAdapter, clockAdapter);
 
 const server = new Server(
   { name: "avd-mcp", version: "0.1.0" },
@@ -146,90 +115,135 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "avd_run_and_screenshot",
       description:
         "Sobe AVD se necessário, roda comando (pnpm/gradle/etc) e tira screenshot.",
+      inputSchema: runAndScreenshotInputSchema,
+    },
+    {
+      name: "avd_list",
+      description: "Lista os AVDs disponíveis na máquina via emulator -list-avds.",
       inputSchema: {
         type: "object",
-        properties: {
-          avdName: { type: "string" },
-          command: { type: "string" },
-          coldBoot: { type: "boolean", default: false },
-          wipeData: { type: "boolean", default: false },
-          noWindow: { type: "boolean", default: false },
-          readOnly: { type: "boolean", default: false },
-          gpuMode: {
-            type: "string",
-            enum: ["auto", "host", "swiftshader_indirect"],
-          },
-          waitMsAfterRun: { type: "number", default: 2000 }
-        },
-        required: ["command"]
-      }
-    }
+        properties: {},
+        required: [],
+      },
+    },
+    {
+      name: "avd_start",
+      description: "Sobe um AVD com opções de boot (coldBoot, wipeData, noWindow, readOnly, gpuMode).",
+      inputSchema: startAvdInputSchema,
+    },
+    {
+      name: "avd_stop",
+      description: "Encerra um emulador online via adb emu kill (serial opcional).",
+      inputSchema: stopAvdInputSchema,
+    },
   ]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  if (req.params.name !== "avd_run_and_screenshot") {
-    throw new Error("Tool desconhecida");
+  switch (req.params.name) {
+    case "avd_run_and_screenshot": {
+      const {
+        avdName,
+        command,
+        coldBoot,
+        wipeData,
+        noWindow,
+        readOnly,
+        gpuMode,
+        waitMsAfterRun,
+      } = runAndScreenshotSchema.parse(req.params.arguments);
+
+      const result = await runAndScreenshotUseCase.execute({
+        ...(avdName ? { avdName } : {}),
+        command,
+        coldBoot,
+        wipeData,
+        noWindow,
+        readOnly,
+        ...(gpuMode ? { gpuMode } : {}),
+        waitMsAfterRun,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `CMD: ${result.command}\n\nSTDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}`,
+          },
+          {
+            type: "image",
+            data: result.screenshotPng.toString("base64"),
+            mimeType: "image/png",
+          },
+        ],
+      };
+    }
+
+    case "avd_list": {
+      const avds = await listAvdsUseCase.execute();
+      return {
+        content: [
+          {
+            type: "text",
+            text: avds.length
+              ? `AVDs disponíveis (${avds.length}):\n- ${avds.join("\n- ")}`
+              : "Nenhum AVD encontrado na máquina.",
+          },
+        ],
+      };
+    }
+
+    case "avd_start": {
+      const {
+        avdName,
+        coldBoot,
+        wipeData,
+        noWindow,
+        readOnly,
+        gpuMode,
+        waitForBoot,
+      } = startAvdSchema.parse(req.params.arguments);
+
+      const result = await startAvdUseCase.execute({
+        ...(avdName ? { avdName } : {}),
+        coldBoot,
+        wipeData,
+        noWindow,
+        readOnly,
+        ...(gpuMode ? { gpuMode } : {}),
+        waitForBoot,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              result.status === "already-online"
+                ? `Já existe device online: ${result.onlineDevices.join(", ")}`
+                : `AVD iniciado: ${result.selectedAvd}\nDevices online: ${result.onlineDevices.join(", ") || "(aguardando boot)"}`,
+          },
+        ],
+      };
+    }
+
+    case "avd_stop": {
+      const { serial } = stopAvdSchema.parse(req.params.arguments);
+      const result = await stopAvdUseCase.execute(serial);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Emulador encerrado: ${result.stoppedSerial}\nDevices online após stop: ${result.onlineDevicesAfterStop.join(", ") || "nenhum"}`,
+          },
+        ],
+      };
+    }
+
+    default:
+      throw new Error("Tool desconhecida");
   }
-
-  const schema = z.object({
-    avdName: z.string().optional(),
-    command: z.string(),
-    coldBoot: z.boolean().optional().default(false),
-    wipeData: z.boolean().optional().default(false),
-    noWindow: z.boolean().optional().default(false),
-    readOnly: z.boolean().optional().default(false),
-    gpuMode: z.enum(["auto", "host", "swiftshader_indirect"]).optional(),
-    waitMsAfterRun: z.number().optional().default(2000),
-  });
-
-  const {
-    avdName,
-    command,
-    coldBoot,
-    wipeData,
-    noWindow,
-    readOnly,
-    gpuMode,
-    waitMsAfterRun,
-  } =
-    schema.parse(req.params.arguments);
-
-  await ensureEmulator({
-    ...(avdName ? { avd: avdName } : {}),
-    coldBoot,
-    wipeData,
-    noWindow,
-    readOnly,
-    ...(gpuMode ? { gpuMode } : {}),
-  });
-
-  const { stdout, stderr } = await runShellCommand(command, 30 * 60_000).catch((e) => ({
-    stdout: "",
-    stderr: String(e),
-  }));
-
-  await new Promise((r) => setTimeout(r, waitMsAfterRun));
-
-  const dir = join(os.tmpdir(), "avd-mcp");
-  await ensureDir(dir);
-  const file = join(dir, `screen-${Date.now()}.png`);
-  await screenshot(file);
-  const png = await readFile(file);
-
-  return {
-    content: [
-      {
-        type: "text",
-        text: `CMD: ${command}\n\nSTDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`
-      },
-      {
-        type: "image",
-        data: png.toString("base64"),
-        mimeType: "image/png"
-      }
-    ]
-  };
 });
 
 await server.connect(new StdioServerTransport());

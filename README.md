@@ -45,6 +45,32 @@ node dist/index.js
 
 ## Usage
 
+### Tool: `avd_list`
+
+Lists available AVDs from `emulator -list-avds`.
+
+### Tool: `avd_start`
+
+Starts an AVD with boot options.
+
+**Parameters:**
+
+- `avdName` (optional)
+- `coldBoot` (optional): Uses `-no-snapshot-load`.
+- `wipeData` (optional): Uses `-wipe-data`.
+- `noWindow` (optional): Uses `-no-window`.
+- `readOnly` (optional): Uses `-read-only`.
+- `gpuMode` (optional): Uses `-gpu`, allowed values: `auto`, `host`, `swiftshader_indirect`.
+- `waitForBoot` (optional): Wait for an online device before returning. Default `true`.
+
+### Tool: `avd_stop`
+
+Stops an online emulator using `adb emu kill`.
+
+**Parameters:**
+
+- `serial` (optional): Emulator serial (example: `emulator-5554`). If omitted, stops the first online emulator.
+
 ### Tool: `avd_run_and_screenshot`
 
 Starts an AVD (if needed), executes a command, waits, and captures a screenshot.
