@@ -1,27 +1,28 @@
-﻿# AVD MCP Server
+# AVD MCP Server
 
-A Model Context Protocol (MCP) server for Android Virtual Device automation. This tool allows you to start an Android emulator, execute commands, and capture screenshots automatically.
+A Model Context Protocol (MCP) server for Android Virtual Device automation. It can start an emulator, execute commands, and capture screenshots automatically.
 
 ## Features
 
--  Automatically starts Android Virtual Device (AVD) if not running
--  Executes commands (pnpm, gradle, npm, etc.)
--  Captures screenshots from the emulator
--  Returns command output and screenshot in base64 format
+- Automatically starts Android Virtual Device (AVD) if not running
+- Executes commands (`pnpm`, `gradle`, `npm`, etc.)
+- Captures screenshots from the emulator
+- Returns command output and screenshot in base64 format
 
 ## Prerequisites
 
 - [Android SDK](https://developer.android.com/studio) with `adb` and `emulator` in PATH
 - [Node.js](https://nodejs.org/) 18 or higher
-- An Android Virtual Device configured in Android Studio
+- At least one AVD configured in Android Studio
+- Shell available for command execution (`powershell` on Windows, `sh` on Linux/macOS, with `bash` and `zsh` fallback)
 
 ## Installation
 
-### Quick Start (Recommended)
+### Quick Start
 
-No installation needed! Just add to your MCP client config (e.g., Claude Desktop):
+No installation needed. Add this to your MCP client config:
 
-``json
+```json
 {
   "mcpServers": {
     "avd-mcp": {
@@ -30,103 +31,70 @@ No installation needed! Just add to your MCP client config (e.g., Claude Desktop
     }
   }
 }
-``
-
-That's it! The package will be automatically downloaded and executed when needed.
+```
 
 ### Local Development
 
-``bash
-# Clone the repository
-git clone https://github.com/yourusername/avd-mcp.git
+```bash
+git clone https://github.com/jramalho/avd-mcp.git
 cd avd-mcp
-
-# Install dependencies
 pnpm install
-
-# Build the project
 pnpm build
-
-# Test locally
 node dist/index.js
-``
+```
 
 ## Usage
 
-### Available Tools
+### Tool: `avd_run_and_screenshot`
 
-#### `avd_run_and_screenshot`
-
-Starts an AVD (if not running), executes a command, waits, and captures a screenshot.
+Starts an AVD (if needed), executes a command, waits, and captures a screenshot.
 
 **Parameters:**
-- `avdName` (optional): Name of the AVD to start. If omitted and no device is running, will throw an error.
-- `command` (required): Command to execute (e.g., `pnpm android`, `gradle assembleDebug`)
-- `waitMsAfterRun` (optional): Milliseconds to wait after command execution before taking screenshot. Default: 2000ms
 
-**Returns:**
-- Command output (stdout/stderr)
-- Screenshot in base64 format (PNG)
+- `avdName` (optional): AVD name. If omitted and no device is online, the first available AVD from `emulator -list-avds` is used.
+- `command` (required): Command to execute.
+- `coldBoot` (optional): Uses `-no-snapshot-load`.
+- `wipeData` (optional): Uses `-wipe-data`.
+- `noWindow` (optional): Uses `-no-window`.
+- `readOnly` (optional): Uses `-read-only`.
+- `gpuMode` (optional): Uses `-gpu`, allowed values: `auto`, `host`, `swiftshader_indirect`.
+- `waitMsAfterRun` (optional): Wait time before screenshot. Default `2000`.
 
 **Example:**
 
-``typescript
+```json
 {
   "avdName": "Pixel_5_API_31",
+  "coldBoot": true,
+  "noWindow": false,
+  "readOnly": false,
+  "gpuMode": "host",
   "command": "pnpm android",
   "waitMsAfterRun": 5000
 }
-``
-
-## How It Works
-
-1. **Device Check**: Checks if an Android device/emulator is already running using `adb devices`
-2. **Start Emulator**: If no device is running and `avdName` is provided, starts the emulator
-3. **Execute Command**: Runs the specified command using PowerShell
-4. **Wait**: Waits for the specified duration to allow UI updates
-5. **Screenshot**: Captures a screenshot using `adb screencap`
-6. **Return**: Returns both command output and screenshot
+```
 
 ## Troubleshooting
 
-### AVD not starting
-- Verify AVD name matches one configured in Android Studio: `emulator -list-avds`
-- Check that `emulator` is in your system PATH
-- Ensure virtualization is enabled in BIOS (Intel VT-x or AMD-V)
+### Emulator not starting
+
+- Check available AVDs with `emulator -list-avds`
+- Ensure `emulator` is in PATH
+- Ensure virtualization is enabled (Intel VT-x / AMD-V)
 
 ### ADB not found
-- Install Android SDK Platform-Tools
-- Add Android SDK platform-tools to PATH: `C:\Users\YourUser\AppData\Local\Android\Sdk\platform-tools`
 
-### Screenshot timeout
-- Increase `waitMsAfterRun` parameter
-- Check if device is fully booted: `adb shell getprop sys.boot_completed` (should return `1`)
+- Install Android SDK Platform-Tools
+- Add platform-tools to PATH (example): `C:\Users\YourUser\AppData\Local\Android\Sdk\platform-tools`
 
 ## Publishing to npm
 
-To publish this package to npm:
-
-``bash
-# Login to npm
+```bash
 npm login
-
-# Update version in package.json
-npm version patch  # or minor, or major
-
-# Publish
+npm version patch
 npm publish
-``
-
-After publishing, users can use it directly with `npx avd-mcp` without cloning!
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Author
-
-Created for automating Android development workflows with AI assistants.
+MIT License - see [LICENSE](LICENSE).

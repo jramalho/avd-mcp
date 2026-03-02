@@ -7,7 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/avd-mcp.git"
+    "url": "https://github.com/jramalho/avd-mcp.git"
+  },
+  "homepage": "https://github.com/jramalho/avd-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/jramalho/avd-mcp/issues"
   },
   "bin": {
     "avd-mcp": "./dist/index.js"
