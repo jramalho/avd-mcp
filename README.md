@@ -113,14 +113,6 @@ Starts an AVD (if needed), executes a command, waits, and captures a screenshot.
 - Install Android SDK Platform-Tools
 - Add platform-tools to PATH (example): `C:\Users\YourUser\AppData\Local\Android\Sdk\platform-tools`
 
-## Publishing to npm
-
-```bash
-npm login
-npm version patch
-npm publish
-```
-
 ## License
 
 MIT License - see [LICENSE](LICENSE).
