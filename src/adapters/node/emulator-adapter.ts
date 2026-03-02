@@ -1,12 +1,13 @@
 import type { BootOptions } from "../../domain/avd.js";
 import type { CommandRunnerPort } from "../../ports/command-runner-port.js";
 import type { EmulatorPort } from "../../ports/emulator-port.js";
+import { defaultTimeouts, runEmulator } from "./command-helpers.js";
 
 export class EmulatorAdapter implements EmulatorPort {
   constructor(private readonly commandRunner: CommandRunnerPort) {}
 
   async listAvds() {
-    const { stdout } = await this.commandRunner.run("emulator", ["-list-avds"], 60_000);
+    const { stdout } = await runEmulator(this.commandRunner, ["-list-avds"], defaultTimeouts.medium);
 
     return stdout
       .split(/\r?\n/)
@@ -23,6 +24,6 @@ export class EmulatorAdapter implements EmulatorPort {
     if (options.readOnly) args.push("-read-only");
     if (options.gpuMode) args.push("-gpu", options.gpuMode);
 
-    await this.commandRunner.run("emulator", args, 5000);
+    await runEmulator(this.commandRunner, args, 5000);
   }
 }

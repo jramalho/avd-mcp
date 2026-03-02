@@ -1,6 +1,6 @@
 {
   "name": "avd-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "MCP server for Android Virtual Device automation",
   "author": "avd-mcp contributors",
@@ -22,6 +22,10 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
+    "test:unit": "pnpm build && node --test dist/tests/unit/*.test.js",
+    "test:mcp": "pnpm build && node dist/tests/mcp-smoke-test.js",
+    "test:adb-tools": "pnpm build && node dist/tests/mcp-adb-tools-scenarios.js",
+    "test": "pnpm test:mcp",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {

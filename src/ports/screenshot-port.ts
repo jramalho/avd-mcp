@@ -1,3 +1,3 @@
 export interface ScreenshotPort {
-  capturePng(): Promise<Buffer>;
+  capturePng(serial?: string): Promise<Buffer>;
 }

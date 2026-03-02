@@ -12,6 +12,7 @@ export type BootOptions = {
 };
 
 export type RunAndScreenshotInput = BootOptions & {
+  serial?: string;
   command: string;
   waitMsAfterRun: number;
 };

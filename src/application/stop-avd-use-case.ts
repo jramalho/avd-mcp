@@ -1,5 +1,7 @@
 import type { AdbPort } from "../ports/adb-port.js";
 import type { ClockPort } from "../ports/clock-port.js";
+import { ToolError } from "../shared/errors/tool-error.js";
+import { waitForDeviceGone } from "./adb-waiters.js";
 
 export type StopAvdOutput = {
   stoppedSerial: string;
@@ -17,33 +19,30 @@ export class StopAvdUseCase {
     const emulatorSerials = devices.filter((device) => device.startsWith("emulator-"));
 
     if (!emulatorSerials.length) {
-      throw new Error("Nenhum emulador online para encerrar.");
+      throw new ToolError({
+        code: "NO_EMULATOR_ONLINE",
+        message: "Nenhum emulador online para encerrar.",
+      });
     }
 
     const targetSerial = serial ?? emulatorSerials[0]!;
 
     if (!emulatorSerials.includes(targetSerial)) {
-      throw new Error(
-        `Serial \"${targetSerial}\" não é um emulador online. Emuladores: ${emulatorSerials.join(", ")}`
-      );
+      throw new ToolError({
+        code: "SERIAL_NOT_ONLINE",
+        message: `Serial \"${targetSerial}\" não é um emulador online.`,
+        technicalDetails: `onlineEmulators=${emulatorSerials.join(",")}`,
+      });
     }
 
     await this.adbPort.killEmulator(targetSerial);
+    await waitForDeviceGone(this.adbPort, this.clockPort, targetSerial);
 
-    for (let i = 0; i < 20; i++) {
-      await this.clockPort.sleep(500);
-      const online = await this.adbPort.listOnlineDeviceSerials();
-      if (!online.includes(targetSerial)) {
-        return {
-          stoppedSerial: targetSerial,
-          onlineDevicesAfterStop: online,
-        };
-      }
-    }
-
-    throw new Error(
-      `Timeout aguardando o emulador \"${targetSerial}\" desligar.`
-    );
+    const online = await this.adbPort.listOnlineDeviceSerials();
+    return {
+      stoppedSerial: targetSerial,
+      onlineDevicesAfterStop: online,
+    };
 
   }
 }

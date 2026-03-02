@@ -2,9 +2,12 @@ import type { BootOptions } from "../domain/avd.js";
 import type { AdbPort } from "../ports/adb-port.js";
 import type { ClockPort } from "../ports/clock-port.js";
 import type { EmulatorPort } from "../ports/emulator-port.js";
+import { ToolError } from "../shared/errors/tool-error.js";
 
 export type StartAvdInput = BootOptions & {
   waitForBoot: boolean;
+  forceStart?: boolean;
+  waitForSerial?: string;
 };
 
 export type StartAvdOutput = {
@@ -22,19 +25,24 @@ export class StartAvdUseCase {
 
   async execute(input: StartAvdInput): Promise<StartAvdOutput> {
     const onlineDevices = await this.adbPort.listOnlineDeviceSerials();
-    if (onlineDevices.length > 0) {
+    if (!input.forceStart && onlineDevices.length > 0) {
       return { status: "already-online", onlineDevices };
     }
 
     const avds = await this.emulatorPort.listAvds();
     if (!avds.length) {
-      throw new Error("Nenhum AVD encontrado na máquina. Crie um AVD no Android Studio.");
+      throw new ToolError({
+        code: "NO_AVD_FOUND",
+        message: "Nenhum AVD encontrado na máquina. Crie um AVD no Android Studio.",
+      });
     }
 
     if (input.avdName && !avds.includes(input.avdName)) {
-      throw new Error(
-        `avdName \"${input.avdName}\" não encontrado. AVDs disponíveis: ${avds.join(", ")}`
-      );
+      throw new ToolError({
+        code: "AVD_NOT_FOUND",
+        message: `avdName \"${input.avdName}\" não encontrado.`,
+        technicalDetails: `availableAvds=${avds.join(",")}`,
+      });
     }
 
     const selectedAvd = input.avdName ?? avds[0]!;
@@ -51,7 +59,11 @@ export class StartAvdUseCase {
     for (let i = 0; i < 60; i++) {
       await this.clockPort.sleep(2000);
       const bootedDevices = await this.adbPort.listOnlineDeviceSerials();
-      if (bootedDevices.length > 0) {
+      const hasExpectedSerial = input.waitForSerial
+        ? bootedDevices.includes(input.waitForSerial)
+        : bootedDevices.length > 0;
+
+      if (hasExpectedSerial) {
         return {
           status: "started",
           selectedAvd,
@@ -60,6 +72,10 @@ export class StartAvdUseCase {
       }
     }
 
-    throw new Error(`Timeout esperando o AVD \"${selectedAvd}\" subir.`);
+    throw new ToolError({
+      code: "AVD_START_TIMEOUT",
+      message: `Timeout esperando o AVD \"${selectedAvd}\" subir.`,
+      technicalDetails: "waitedMs=120000",
+    });
   }
 }
