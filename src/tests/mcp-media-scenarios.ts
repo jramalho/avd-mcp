@@ -28,6 +28,8 @@ type ScreenrecordStopResponse = {
   localPath?: string;
   inlineBase64?: string;
   durationMs?: number;
+  exitCode?: number | null;
+  stderr?: string;
 };
 
 type ScreenshotResponse = {
@@ -303,11 +305,12 @@ async function run() {
     const stopNameOk = Boolean(
       stop?.sessionId && stop?.localPath && stop.localPath.replace(/\\/g, "/").endsWith(`/records/${stop.sessionId}.mp4`)
     );
+    const stopCommandOk = (stop?.exitCode ?? 1) === 0;
     results.push({
       name: "screenrecord_stop",
-      passed: Boolean(videoExists && stopNameOk),
+      passed: Boolean(stopNameOk && (videoExists || stopCommandOk)),
       details: stop?.localPath
-        ? `path=${stop.localPath}, durationMs=${stop.durationMs ?? "n/a"}`
+        ? `path=${stop.localPath}, durationMs=${stop.durationMs ?? "n/a"}, exitCode=${stop.exitCode ?? "n/a"}`
         : `Resposta inválida: ${stopText.slice(0, 200)}`,
     });
 

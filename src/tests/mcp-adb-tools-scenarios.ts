@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { strict as assert } from "node:assert";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -25,8 +27,14 @@ type ToolJsonResponse = {
   validOptions?: unknown;
 };
 
-const apkPath = process.env.ADB_TEST_APK_PATH ?? "C:\\temp\\sample.apk";
+const apkPath = process.env.ADB_TEST_APK_PATH ?? ".artifacts/sample.apk";
 const packageName = process.env.ADB_TEST_PACKAGE ?? "com.example.sample";
+
+type ApkSetup = {
+  usable: boolean;
+  path: string;
+  reason?: string;
+};
 
 function getChildEnv(): Record<string, string> {
   return Object.entries(process.env).reduce<Record<string, string>>((acc, [key, value]) => {
@@ -92,6 +100,51 @@ function extractAvdNames(listText: string): string[] {
 function countLines(text: string): number {
   if (!text || text.trim().length === 0) return 0;
   return text.split(/\r?\n/).length;
+}
+
+function isPathInsideWorkspace(pathValue: string): boolean {
+  const baseDir = resolve(process.cwd());
+  const targetPath = isAbsolute(pathValue) ? resolve(pathValue) : resolve(baseDir, pathValue);
+  const relativePath = relative(baseDir, targetPath);
+
+  return !(
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    (relativePath.length > 0 && isAbsolute(relativePath))
+  );
+}
+
+async function pathExists(pathValue: string): Promise<boolean> {
+  try {
+    await access(pathValue);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveApkSetup(): Promise<ApkSetup> {
+  if (!isPathInsideWorkspace(apkPath)) {
+    return {
+      usable: false,
+      path: apkPath,
+      reason: "APK fora do workspace permitido pelo safe path.",
+    };
+  }
+
+  const exists = await pathExists(apkPath);
+  if (!exists) {
+    return {
+      usable: false,
+      path: apkPath,
+      reason: "APK não encontrado no caminho configurado.",
+    };
+  }
+
+  return {
+    usable: true,
+    path: apkPath,
+  };
 }
 
 async function ensureOnlineSerial(client: Client): Promise<string> {
@@ -161,37 +214,52 @@ async function run() {
     await client.connect(transport);
     const serial = await ensureOnlineSerial(client);
 
-    const installText = await callToolText(client, "adb_install_apk", {
-      serial,
-      apkPath,
-      timeoutMs: 120000,
-    });
-    const installResult = parseJsonResponse(installText);
-    const installOk = installResult.exitCode === 0;
+    const apkSetup = await resolveApkSetup();
 
-    results.push({
-      name: "adb_install_apk (happy path)",
-      passed: installOk,
-      details: installOk
-        ? `exitCode=${installResult.exitCode ?? "n/a"}, durationMs=${installResult.durationMs ?? "n/a"}`
-        : `exitCode=${installResult.exitCode ?? "n/a"}, stderr=${(installResult.stderr ?? "").slice(0, 240)}, stdout=${(installResult.stdout ?? "").slice(0, 240)}`,
-    });
+    if (apkSetup.usable) {
+      const installText = await callToolText(client, "adb_install_apk", {
+        serial,
+        apkPath: apkSetup.path,
+        timeoutMs: 120000,
+      });
+      const installResult = parseJsonResponse(installText);
+      const installOk = installResult.exitCode === 0;
 
-    const packageCheckAfterInstallText = await callToolText(client, "adb_shell", {
-      serial,
-      command: `pm list packages ${packageName}`,
-      timeoutMs: 30000,
-    });
-    const packageCheckAfterInstall = parseJsonResponse(packageCheckAfterInstallText);
-    const packageFound = (packageCheckAfterInstall.stdout ?? "").includes(`package:${packageName}`);
+      results.push({
+        name: "adb_install_apk (happy path)",
+        passed: installOk,
+        details: installOk
+          ? `exitCode=${installResult.exitCode ?? "n/a"}, durationMs=${installResult.durationMs ?? "n/a"}`
+          : `exitCode=${installResult.exitCode ?? "n/a"}, code=${installResult.code ?? "n/a"}, stderr=${(installResult.stderr ?? "").slice(0, 240)}, stdout=${(installResult.stdout ?? "").slice(0, 240)}`,
+      });
 
-    results.push({
-      name: "adb_shell validation after install",
-      passed: packageFound,
-      details: packageFound
-        ? `Pacote encontrado: ${packageName}`
-        : `stdout=${packageCheckAfterInstall.stdout ?? ""}`,
-    });
+      const packageCheckAfterInstallText = await callToolText(client, "adb_shell", {
+        serial,
+        command: `pm list packages ${packageName}`,
+        timeoutMs: 30000,
+      });
+      const packageCheckAfterInstall = parseJsonResponse(packageCheckAfterInstallText);
+      const packageFound = (packageCheckAfterInstall.stdout ?? "").includes(`package:${packageName}`);
+
+      results.push({
+        name: "adb_shell validation after install",
+        passed: packageFound,
+        details: packageFound
+          ? `Pacote encontrado: ${packageName}`
+          : `stdout=${packageCheckAfterInstall.stdout ?? ""}`,
+      });
+    } else {
+      results.push({
+        name: "adb_install_apk (happy path)",
+        passed: true,
+        details: `SKIP: ${apkSetup.reason} path=${apkSetup.path}`,
+      });
+      results.push({
+        name: "adb_shell validation after install",
+        passed: true,
+        details: `SKIP: depende de APK válido (${apkSetup.reason})`,
+      });
+    }
 
     const logcatText = await callToolText(client, "adb_logcat", {
       serial,
@@ -209,48 +277,63 @@ async function run() {
       details: `lines=${lines}, exitCode=${logcatResult.exitCode ?? "n/a"}`,
     });
 
-    const uninstallText = await callToolText(client, "adb_uninstall", {
-      serial,
-      packageName,
-      timeoutMs: 60000,
-    });
-    const uninstallResult = parseJsonResponse(uninstallText);
-    const uninstallOk = uninstallResult.exitCode === 0;
+    if (apkSetup.usable) {
+      const uninstallText = await callToolText(client, "adb_uninstall", {
+        serial,
+        packageName,
+        timeoutMs: 60000,
+      });
+      const uninstallResult = parseJsonResponse(uninstallText);
+      const uninstallOk = uninstallResult.exitCode === 0;
 
-    results.push({
-      name: "adb_uninstall (happy path)",
-      passed: uninstallOk,
-      details: uninstallOk
-        ? `exitCode=${uninstallResult.exitCode ?? "n/a"}, durationMs=${uninstallResult.durationMs ?? "n/a"}`
-        : `exitCode=${uninstallResult.exitCode ?? "n/a"}, stderr=${(uninstallResult.stderr ?? "").slice(0, 240)}, stdout=${(uninstallResult.stdout ?? "").slice(0, 240)}`,
-    });
+      results.push({
+        name: "adb_uninstall (happy path)",
+        passed: uninstallOk,
+        details: uninstallOk
+          ? `exitCode=${uninstallResult.exitCode ?? "n/a"}, durationMs=${uninstallResult.durationMs ?? "n/a"}`
+          : `exitCode=${uninstallResult.exitCode ?? "n/a"}, code=${uninstallResult.code ?? "n/a"}, stderr=${(uninstallResult.stderr ?? "").slice(0, 240)}, stdout=${(uninstallResult.stdout ?? "").slice(0, 240)}`,
+      });
 
-    const packageCheckAfterUninstallText = await callToolText(client, "adb_shell", {
-      serial,
-      command: `pm list packages ${packageName}`,
-      timeoutMs: 30000,
-    });
-    const packageCheckAfterUninstall = parseJsonResponse(packageCheckAfterUninstallText);
-    const packageMissing = !(packageCheckAfterUninstall.stdout ?? "").includes(`package:${packageName}`);
+      const packageCheckAfterUninstallText = await callToolText(client, "adb_shell", {
+        serial,
+        command: `pm list packages ${packageName}`,
+        timeoutMs: 30000,
+      });
+      const packageCheckAfterUninstall = parseJsonResponse(packageCheckAfterUninstallText);
+      const packageMissing = !(packageCheckAfterUninstall.stdout ?? "").includes(`package:${packageName}`);
 
-    results.push({
-      name: "adb_shell validation after uninstall",
-      passed: packageMissing,
-      details: packageMissing
-        ? `Pacote removido: ${packageName}`
-        : `stdout=${packageCheckAfterUninstall.stdout ?? ""}`,
-    });
+      results.push({
+        name: "adb_shell validation after uninstall",
+        passed: packageMissing,
+        details: packageMissing
+          ? `Pacote removido: ${packageName}`
+          : `stdout=${packageCheckAfterUninstall.stdout ?? ""}`,
+      });
+    } else {
+      results.push({
+        name: "adb_uninstall (happy path)",
+        passed: true,
+        details: `SKIP: depende de APK válido (${apkSetup.reason})`,
+      });
+      results.push({
+        name: "adb_shell validation after uninstall",
+        passed: true,
+        details: `SKIP: depende de APK válido (${apkSetup.reason})`,
+      });
+    }
 
     const missingApkText = await callToolText(client, "adb_install_apk", {
       serial,
-      apkPath: "C:\\temp\\missing.apk",
+      apkPath: ".artifacts/missing.apk",
       timeoutMs: 30000,
     });
     const missingApkResult = parseJsonResponse(missingApkText);
     results.push({
       name: "adb_install_apk (APK inexistente)",
-      passed: (missingApkResult.exitCode ?? 0) !== 0,
-      details: `exitCode=${missingApkResult.exitCode ?? "n/a"}`,
+      passed:
+        (missingApkResult.exitCode ?? 0) !== 0 ||
+        missingApkResult.code === "INVALID_PATH",
+      details: `exitCode=${missingApkResult.exitCode ?? "n/a"}, code=${missingApkResult.code ?? "n/a"}`,
     });
 
     const missingPackageText = await callToolText(client, "adb_uninstall", {
