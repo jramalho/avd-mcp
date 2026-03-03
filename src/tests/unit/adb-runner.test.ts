@@ -10,6 +10,7 @@ test("runAdbCommand adds serial prefix when serial is provided", async () => {
     capturedArgs = args;
     return {
       stdout: "ok",
+      stdoutBuffer: Buffer.from("ok"),
       stderr: "",
       exitCode: 0,
     };
@@ -32,6 +33,7 @@ test("runAdbCommand uses default timeout when timeout is not provided", async ()
     capturedTimeout = timeoutMs;
     return {
       stdout: "",
+      stdoutBuffer: Buffer.alloc(0),
       stderr: "",
       exitCode: 0,
     };
@@ -47,6 +49,7 @@ test("runAdbCommand uses default timeout when timeout is not provided", async ()
 test("runAdbCommand rejects unsafe arguments", async () => {
   const runner = new AdbRunner(async () => ({
     stdout: "",
+    stdoutBuffer: Buffer.alloc(0),
     stderr: "",
     exitCode: 0,
   }));
@@ -63,6 +66,7 @@ test("runAdbCommand rejects unsafe arguments", async () => {
 test("runAdbCommand returns structured output with duration", async () => {
   const runner = new AdbRunner(async () => ({
     stdout: "line1",
+    stdoutBuffer: Buffer.from("line1"),
     stderr: "warn",
     exitCode: 42,
   }));

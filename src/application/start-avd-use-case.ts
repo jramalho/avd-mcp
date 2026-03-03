@@ -3,6 +3,7 @@ import type { AdbPort } from "../ports/adb-port.js";
 import type { ClockPort } from "../ports/clock-port.js";
 import type { EmulatorPort } from "../ports/emulator-port.js";
 import { ToolError } from "../shared/errors/tool-error.js";
+import { findClosestString } from "../shared/utils/string-distance.js";
 
 export type StartAvdInput = BootOptions & {
   waitForBoot: boolean;
@@ -38,9 +39,12 @@ export class StartAvdUseCase {
     }
 
     if (input.avdName && !avds.includes(input.avdName)) {
+      const closest = findClosestString(input.avdName, avds);
       throw new ToolError({
         code: "AVD_NOT_FOUND",
         message: `avdName \"${input.avdName}\" não encontrado.`,
+        ...(closest ? { hints: [`Você quis dizer ${closest}?`] } : {}),
+        validOptions: avds,
         technicalDetails: `availableAvds=${avds.join(",")}`,
       });
     }

@@ -266,6 +266,230 @@ export const clearAppDataSchema = z.object({
   timeoutMs: z.number().optional().default(30_000),
 });
 
+export const screenrecordStartInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    maxDurationSeconds: { type: "number", default: 120 },
+    bitRate: { type: "number" },
+    size: { type: "string" },
+  },
+  required: [],
+} as const;
+
+export const screenrecordStartSchema = z.object({
+  serial: z.string().optional(),
+  maxDurationSeconds: z.number().optional().default(120),
+  bitRate: z.number().optional(),
+  size: z.string().optional(),
+});
+
+export const screenrecordStopInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    sessionId: { type: "string" },
+    inlineBase64: { type: "boolean" },
+  },
+  required: ["sessionId"],
+} as const;
+
+export const screenrecordStopSchema = z.object({
+  serial: z.string().optional(),
+  sessionId: z.string().min(1),
+  inlineBase64: z.boolean().optional(),
+});
+
+export const screenshotInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    crop: {
+      type: "object",
+      properties: {
+        x: { type: "number" },
+        y: { type: "number" },
+        width: { type: "number" },
+        height: { type: "number" },
+      },
+      required: ["x", "y", "width", "height"],
+    },
+    compressQuality: { type: "number" },
+    annotate: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+        },
+        required: ["text", "x", "y"],
+      },
+    },
+    inlineBase64: { type: "boolean" },
+  },
+  required: [],
+} as const;
+
+export const screenshotSchema = z.object({
+  serial: z.string().optional(),
+  crop: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number(),
+    })
+    .optional(),
+  compressQuality: z.number().optional(),
+  annotate: z
+    .array(
+      z.object({
+        text: z.string(),
+        x: z.number(),
+        y: z.number(),
+      })
+    )
+    .optional(),
+  inlineBase64: z.boolean().optional(),
+});
+
+export const networkToggleInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    wifiEnabled: { type: "boolean" },
+    dataEnabled: { type: "boolean" },
+    airplaneMode: { type: "boolean" },
+  },
+  required: ["wifiEnabled"],
+} as const;
+
+export const networkToggleSchema = z.object({
+  serial: z.string().optional(),
+  wifiEnabled: z.boolean(),
+  dataEnabled: z.boolean().optional(),
+  airplaneMode: z.boolean().optional(),
+});
+
+export const networkConditionInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    profile: {
+      oneOf: [
+        {
+          type: "string",
+          enum: ["good", "slow_3g", "lte", "offline"],
+        },
+        {
+          type: "object",
+          properties: {
+            latencyMs: { type: "number" },
+            packetLoss: { type: "number" },
+            speedKbps: { type: "number" },
+          },
+        },
+      ],
+    },
+  },
+  required: ["profile"],
+} as const;
+
+export const networkConditionSchema = z.object({
+  serial: z.string().optional(),
+  profile: z.union([
+    z.enum(["good", "slow_3g", "lte", "offline"]),
+    z
+      .object({
+        latencyMs: z.number().optional(),
+        packetLoss: z.number().optional(),
+        speedKbps: z.number().optional(),
+      })
+      .refine(
+        (value) =>
+          value.latencyMs !== undefined ||
+          value.packetLoss !== undefined ||
+          value.speedKbps !== undefined,
+        "No perfil avançado, informe ao menos latencyMs, packetLoss ou speedKbps."
+      ),
+  ]),
+});
+
+export const setLocationInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    latitude: { type: "number" },
+    longitude: { type: "number" },
+  },
+  required: ["latitude", "longitude"],
+} as const;
+
+export const setLocationSchema = z.object({
+  serial: z.string().optional(),
+  latitude: z.number(),
+  longitude: z.number(),
+});
+
+export const setBatteryStateInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    level: { type: "number" },
+    charging: { type: "boolean" },
+  },
+  required: [],
+} as const;
+
+export const setBatteryStateSchema = z.object({
+  serial: z.string().optional(),
+  level: z.number().optional(),
+  charging: z.boolean().optional(),
+});
+
+export const setRotationInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    orientation: {
+      type: "string",
+      enum: ["portrait", "landscape"],
+    },
+  },
+  required: ["orientation"],
+} as const;
+
+export const setRotationSchema = z.object({
+  serial: z.string().optional(),
+  orientation: z.enum(["portrait", "landscape"]),
+});
+
+export const setLocaleInputSchema = {
+  type: "object",
+  properties: {
+    serial: { type: "string" },
+    language: { type: "string" },
+    country: { type: "string" },
+  },
+  required: ["language"],
+} as const;
+
+export const setLocaleSchema = z.object({
+  serial: z.string().optional(),
+  language: z.string().min(2),
+  country: z.string().min(2).max(2).optional(),
+});
+
+export const getMetricsInputSchema = {
+  type: "object",
+  properties: {},
+  required: [],
+} as const;
+
+export const getMetricsSchema = z.object({});
+
 export const toolDefinitions = [
   {
     name: "avd_run_and_screenshot",
@@ -346,5 +570,55 @@ export const toolDefinitions = [
     name: "clear_app_data",
     description: "Limpa dados do app alvo com pm clear em safe mode.",
     inputSchema: clearAppDataInputSchema,
+  },
+  {
+    name: "screenrecord_start",
+    description: "Inicia gravação de tela no device e retorna sessionId.",
+    inputSchema: screenrecordStartInputSchema,
+  },
+  {
+    name: "screenrecord_stop",
+    description: "Encerra gravação, faz pull do MP4 e retorna artifact local.",
+    inputSchema: screenrecordStopInputSchema,
+  },
+  {
+    name: "screenshot",
+    description: "Captura screenshot com crop/compress/annotate e salva em artifacts.",
+    inputSchema: screenshotInputSchema,
+  },
+  {
+    name: "network_toggle",
+    description: "Liga/desliga wifi, dados móveis e modo avião via adb shell svc/settings.",
+    inputSchema: networkToggleInputSchema,
+  },
+  {
+    name: "network_condition",
+    description: "Aplica perfil de rede no emulador (delay/speed) ou perfil avançado.",
+    inputSchema: networkConditionInputSchema,
+  },
+  {
+    name: "set_location",
+    description: "Define localização GPS no emulador via adb emu geo fix.",
+    inputSchema: setLocationInputSchema,
+  },
+  {
+    name: "set_battery_state",
+    description: "Ajusta estado de bateria (nível/carga) via dumpsys battery.",
+    inputSchema: setBatteryStateInputSchema,
+  },
+  {
+    name: "set_rotation",
+    description: "Define rotação do device (portrait/landscape).",
+    inputSchema: setRotationInputSchema,
+  },
+  {
+    name: "set_locale",
+    description: "Define locale do device (idioma/país) via setprop e broadcast.",
+    inputSchema: setLocaleInputSchema,
+  },
+  {
+    name: "get_metrics",
+    description: "Retorna estatísticas de execução por tool desde o start do processo.",
+    inputSchema: getMetricsInputSchema,
   },
 ] as const;

@@ -9,6 +9,7 @@ import type { EmulatorPort } from "../ports/emulator-port.js";
 import type { ShellPort } from "../ports/shell-port.js";
 import type { ScreenshotPort } from "../ports/screenshot-port.js";
 import { ToolError } from "../shared/errors/tool-error.js";
+import { findClosestString } from "../shared/utils/string-distance.js";
 
 export class RunAndScreenshotUseCase {
   constructor(
@@ -67,9 +68,12 @@ export class RunAndScreenshotUseCase {
     }
 
     if (options.avdName && !avds.includes(options.avdName)) {
+      const closest = findClosestString(options.avdName, avds);
       throw new ToolError({
         code: "AVD_NOT_FOUND",
         message: `avdName \"${options.avdName}\" não encontrado.`,
+        ...(closest ? { hints: [`Você quis dizer ${closest}?`] } : {}),
+        validOptions: avds,
         technicalDetails: `availableAvds=${avds.join(",")}`,
       });
     }

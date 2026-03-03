@@ -20,3 +20,15 @@ test("blocks rm -rf root command", () => {
     assertSafeAdbShellCommand("rm -rf /");
   }, /safe mode/);
 });
+
+test("blocks command outside allowlist", () => {
+  assert.throws(() => {
+    assertSafeAdbShellCommand("cat /proc/cpuinfo");
+  }, /Comando não permitido em safe mode/);
+});
+
+test("allows controlled media cleanup rm command", () => {
+  assert.doesNotThrow(() => {
+    assertSafeAdbShellCommand("rm /sdcard/mcp_record_1710000000000.mp4");
+  });
+});

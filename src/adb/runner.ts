@@ -2,16 +2,20 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { assertSafeAdbShellArgs } from "./shell-safety.js";
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type RunAdbCommandInput = {
   serial?: string;
   args: string[];
   timeoutMs?: number;
+  responseType?: "text" | "binary";
 };
 
 export type RunAdbCommandOutput = {
   stdout: string;
+  stdoutBuffer: Buffer;
   stderr: string;
   exitCode: number;
   durationMs: number;
@@ -25,6 +29,7 @@ export type ProcessExecutionInput = {
 
 export type ProcessExecutionOutput = {
   stdout: string;
+  stdoutBuffer: Buffer;
   stderr: string;
   exitCode: number;
 };
@@ -36,7 +41,7 @@ function withExecutableSuffix(command: string) {
   return command.endsWith(".exe") ? command : `${command}.exe`;
 }
 
-function resolveAdbExecutable(): string {
+export function resolveAdbExecutable(): string {
   const sdkRoot = process.env.ANDROID_SDK_ROOT ?? process.env.ANDROID_HOME;
   if (!sdkRoot) {
     return "adb";
@@ -76,7 +81,7 @@ export const defaultProcessExecutor: ProcessExecutor = ({ executable, args, time
       windowsHide: true,
     });
 
-    let stdout = "";
+    const stdoutChunks: Buffer[] = [];
     let stderr = "";
     let finished = false;
 
@@ -85,14 +90,15 @@ export const defaultProcessExecutor: ProcessExecutor = ({ executable, args, time
       child.kill();
       finished = true;
       resolve({
-        stdout,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stdoutBuffer: Buffer.concat(stdoutChunks),
         stderr: `${stderr}\nProcess timeout after ${timeoutMs}ms`.trim(),
         exitCode: 124,
       });
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk ?? "");
+      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk ?? "")));
     });
 
     child.stderr?.on("data", (chunk) => {
@@ -104,7 +110,8 @@ export const defaultProcessExecutor: ProcessExecutor = ({ executable, args, time
       clearTimeout(timer);
       finished = true;
       resolve({
-        stdout,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stdoutBuffer: Buffer.concat(stdoutChunks),
         stderr: `${stderr}\n${error.name}: ${error.message}`.trim(),
         exitCode: 1,
       });
@@ -115,7 +122,8 @@ export const defaultProcessExecutor: ProcessExecutor = ({ executable, args, time
       clearTimeout(timer);
       finished = true;
       resolve({
-        stdout,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stdoutBuffer: Buffer.concat(stdoutChunks),
         stderr,
         exitCode: code ?? 1,
       });
@@ -134,6 +142,10 @@ export class AdbRunner {
     const timeoutMs = input.timeoutMs ?? this.defaultTimeoutMs;
     const safeArgs = sanitizeArgs(input.args);
 
+    if (safeArgs[0] === "shell") {
+      assertSafeAdbShellArgs(safeArgs.slice(1));
+    }
+
     const commandArgs = [
       ...(input.serial ? ["-s", input.serial] : []),
       ...safeArgs,
@@ -146,7 +158,8 @@ export class AdbRunner {
     });
 
     return {
-      stdout: result.stdout,
+      stdout: input.responseType === "binary" ? "" : result.stdout,
+      stdoutBuffer: result.stdoutBuffer,
       stderr: result.stderr,
       exitCode: result.exitCode,
       durationMs: Date.now() - startedAt,

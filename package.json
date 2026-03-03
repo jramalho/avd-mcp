@@ -25,11 +25,14 @@
     "test:unit": "pnpm build && node --test dist/tests/unit/*.test.js",
     "test:mcp": "pnpm build && node dist/tests/mcp-smoke-test.js",
     "test:adb-tools": "pnpm build && node dist/tests/mcp-adb-tools-scenarios.js",
+    "test:media-tools": "pnpm build && node dist/tests/mcp-media-scenarios.js",
+    "test:network-device-tools": "pnpm build && node dist/tests/mcp-network-device-scenarios.js",
     "test": "pnpm test:mcp",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "sharp": "^0.34.5",
     "zod": "^3.23.0"
   },
   "devDependencies": {

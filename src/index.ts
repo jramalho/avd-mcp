@@ -23,12 +23,18 @@ import { EmulatorAdapter } from "./adapters/node/emulator-adapter.js";
 import { ExecCommandRunner } from "./adapters/node/exec-command-runner.js";
 import { ScreenshotAdapter } from "./adapters/node/screenshot-adapter.js";
 import { ShellAdapter } from "./adapters/node/shell-adapter.js";
+import { MediaArtifacts } from "./media/media-artifacts.js";
+import { getMediaConfig } from "./media/media-config.js";
+import { ScreenrecordSessionManager } from "./media/screenrecord-session-manager.js";
+import { ScreenshotService } from "./media/screenshot-service.js";
 import { toolDefinitions } from "./mcp/tools/definitions.js";
 import { createToolCallHandler } from "./mcp/tools/handler.js";
-import { Logger } from "./shared/logging/logger.js";
 
-const logger = new Logger("avd-mcp");
 const adbRunner = new AdbRunner();
+const mediaConfig = getMediaConfig();
+const mediaArtifacts = new MediaArtifacts(mediaConfig.artifactsRootDir);
+const screenrecordSessionManager = new ScreenrecordSessionManager(adbRunner, mediaArtifacts);
+const screenshotService = new ScreenshotService(adbRunner, mediaArtifacts);
 
 const commandRunner = new ExecCommandRunner();
 const adbAdapter = new AdbAdapter(commandRunner);
@@ -60,7 +66,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(
   CallToolRequestSchema,
   createToolCallHandler({
-    logger,
     listAvdsUseCase,
     runAndScreenshotUseCase,
     startAvdUseCase,
@@ -68,6 +73,9 @@ server.setRequestHandler(
     avdStatusUseCase,
     avdRestartUseCase,
     adbRunner,
+    screenrecordSessionManager,
+    screenshotService,
+    mediaConfig,
   })
 );
 

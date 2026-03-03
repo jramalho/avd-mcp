@@ -19,6 +19,16 @@ const expectedTools = [
   "open_deeplink",
   "grant_permissions",
   "clear_app_data",
+  "screenrecord_start",
+  "screenrecord_stop",
+  "screenshot",
+  "network_toggle",
+  "network_condition",
+  "set_location",
+  "set_battery_state",
+  "set_rotation",
+  "set_locale",
+  "get_metrics",
 ] as const;
 
 type TextContent = { type: "text"; text: string };
