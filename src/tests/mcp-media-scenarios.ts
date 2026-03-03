@@ -38,6 +38,13 @@ type ScreenshotResponse = {
   inlineBase64?: string;
 };
 
+type ToolErrorResponse = {
+  code?: string;
+  message?: string;
+  hints?: string[];
+  validOptions?: unknown;
+};
+
 function getChildEnv(): Record<string, string> {
   return Object.entries(process.env).reduce<Record<string, string>>((acc, [key, value]) => {
     if (typeof value === "string") {
@@ -99,7 +106,16 @@ function parseJsonSafe<T>(text: string): T | undefined {
   }
 }
 
+function parseErrorCode(text: string): string | undefined {
+  return parseJsonSafe<ToolErrorResponse>(text)?.code;
+}
+
 function isMissingEmulatorBinary(text: string): boolean {
+  const errorCode = parseErrorCode(text);
+  if (errorCode === "UNEXPECTED_ERROR") {
+    return true;
+  }
+
   return (
     text.includes("Código: UNEXPECTED_ERROR") &&
     text.toLowerCase().includes("spawn emulator enoent")
@@ -300,7 +316,7 @@ async function run() {
       sessionId: "session-inexistente",
       inlineBase64: false,
     });
-    const invalidStopOk = invalidStopText.includes("Código: SCREENRECORD_SESSION_NOT_FOUND");
+    const invalidStopOk = parseErrorCode(invalidStopText) === "SCREENRECORD_SESSION_NOT_FOUND";
     results.push({
       name: "screenrecord_stop sessão inválida",
       passed: invalidStopOk,

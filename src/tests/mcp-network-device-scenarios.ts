@@ -32,6 +32,13 @@ type ToolResultJson = {
   }>;
 };
 
+type ToolErrorResponse = {
+  code?: string;
+  message?: string;
+  hints?: string[];
+  validOptions?: unknown;
+};
+
 function getChildEnv(): Record<string, string> {
   return Object.entries(process.env).reduce<Record<string, string>>((acc, [key, value]) => {
     if (typeof value === "string") {
@@ -80,6 +87,10 @@ function parseJsonSafe<T>(text: string): T | undefined {
   }
 }
 
+function parseErrorCode(text: string): string | undefined {
+  return parseJsonSafe<ToolErrorResponse>(text)?.code;
+}
+
 function extractAvdNames(listText: string): string[] {
   return listText
     .split(/\r?\n/)
@@ -94,6 +105,11 @@ function extractEmulatorSerials(text: string): string[] {
 }
 
 function isMissingEmulatorBinary(text: string): boolean {
+  const errorCode = parseErrorCode(text);
+  if (errorCode === "UNEXPECTED_ERROR") {
+    return true;
+  }
+
   return (
     text.includes("Código: UNEXPECTED_ERROR") &&
     text.toLowerCase().includes("spawn emulator enoent")

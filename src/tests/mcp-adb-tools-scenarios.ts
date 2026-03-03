@@ -19,6 +19,10 @@ type ToolJsonResponse = {
   stderr?: string;
   exitCode?: number;
   durationMs?: number;
+  code?: string;
+  message?: string;
+  hints?: string[];
+  validOptions?: unknown;
 };
 
 const apkPath = process.env.ADB_TEST_APK_PATH ?? "C:\\temp\\sample.apk";
@@ -266,10 +270,11 @@ async function run() {
       command: "reboot",
       timeoutMs: 10000,
     });
+    const blockedShellResult = parseJsonResponse(blockedShellText);
     results.push({
       name: "adb_shell (safe mode bloqueio)",
-      passed: blockedShellText.includes("Código: SHELL_COMMAND_BLOCKED"),
-      details: blockedShellText.includes("Código:") ? blockedShellText.split("\n")[1] ?? "" : blockedShellText,
+      passed: blockedShellResult.code === "SHELL_COMMAND_BLOCKED",
+      details: blockedShellResult.message ?? blockedShellText,
     });
 
     const invalidSerialShellText = await callToolText(client, "adb_shell", {
